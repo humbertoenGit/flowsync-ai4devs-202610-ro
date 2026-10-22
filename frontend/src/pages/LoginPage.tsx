@@ -25,7 +25,7 @@ export function LoginPage() {
     setSubmitting(true)
 
     try {
-      const { token } = await login({ email, password })
+      const { token } = await login({ email: email.trim(), password })
       setToken(token)
       navigate('/profile', { replace: true })
     } catch (error) {

@@ -68,13 +68,18 @@ export function SignupPage() {
     event.preventDefault()
     setFormError(null)
 
-    const clientErrors = validate(email, password, passwordConfirmation)
+    const trimmedEmail = email.trim()
+    const clientErrors = validate(trimmedEmail, password, passwordConfirmation)
     setFieldErrors(clientErrors)
     if (Object.keys(clientErrors).length > 0) return
 
     setSubmitting(true)
     try {
-      const { token } = await signup({ email, password, passwordConfirmation })
+      const { token } = await signup({
+        email: trimmedEmail,
+        password,
+        passwordConfirmation,
+      })
       setToken(token)
       navigate('/profile', { replace: true })
     } catch (error) {
@@ -123,8 +128,6 @@ export function SignupPage() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={PASSWORD_MIN}
-          maxLength={PASSWORD_MAX}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           error={fieldErrors.password}
