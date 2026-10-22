@@ -109,10 +109,9 @@ export function ProfilePage() {
                   <dt className="sr-only">Email</dt>
                   <dd>{state.user.email}</dd>
                 </div>
-                <div>
-                  <dt className="sr-only">Miembro desde</dt>
-                  <dd className="text-muted-foreground">
-                    Miembro desde{' '}
+                <div className="flex gap-1 text-muted-foreground">
+                  <dt>Miembro desde</dt>
+                  <dd>
                     {dateFormatter.format(new Date(state.user.createdAt))}
                   </dd>
                 </div>
