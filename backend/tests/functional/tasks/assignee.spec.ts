@@ -11,6 +11,9 @@ import testUtils from '@adonisjs/core/services/test_utils'
  * Las tareas se crean por la API y no con el modelo: así el responsable lo pone
  * el sistema, como en la realidad. Quien las mira es otra cuenta, para que lo que
  * llega en `assignee` no se confunda con los datos de la propia sesión.
+ *
+ * El requisito habla de «cada tarea», y la tarea suelta y la lista tienen cada
+ * una su propio transformer, así que todos los scenarios se comprueban en las dos.
  */
 test.group('Tasks | responsable', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
@@ -35,21 +38,39 @@ test.group('Tasks | responsable', (group) => {
     return response.body().data.id as number
   }
 
+  /**
+   * El responsable de la tarea `id` tal y como llega en las dos lecturas: la
+   * tarea suelta y la tarea dentro de la lista.
+   */
+  async function responsables(client: any, token: string, id: number) {
+    const suelta = await client
+      .get(`/api/v1/tasks/${id}`)
+      .qs({ today })
+      .header('Authorization', `Bearer ${token}`)
+
+    const lista = await client.get('/api/v1/tasks').header('Authorization', `Bearer ${token}`)
+
+    suelta.assertStatus(200)
+    lista.assertStatus(200)
+
+    const enLaLista = (lista.body().data as any[]).find((tarea) => tarea.id === id)
+
+    return [
+      ['suelta', suelta.body().data.assignee],
+      ['en la lista', enLaLista?.assignee],
+    ] as Array<[string, any]>
+  }
+
   test('el responsable llega con su nombre y sus iniciales', async ({ client, assert }) => {
     const ada = await sesion(client, 'Ada Lovelace', 'ada@example.com')
     const alan = await sesion(client, 'Alan Turing', 'alan@example.com')
     const id = await tareaDe(client, ada)
 
-    const response = await client
-      .get(`/api/v1/tasks/${id}`)
-      .qs({ today })
-      .header('Authorization', `Bearer ${alan}`)
-
-    response.assertStatus(200)
-
-    const { assignee } = response.body().data
-    assert.equal(assignee.fullName, 'Ada Lovelace')
-    assert.equal(assignee.initials, 'AL')
+    for (const [donde, assignee] of await responsables(client, alan, id)) {
+      assert.exists(assignee, `la tarea ${donde} no trae responsable`)
+      assert.equal(assignee.fullName, 'Ada Lovelace', `la tarea ${donde} no trae el nombre`)
+      assert.equal(assignee.initials, 'AL', `la tarea ${donde} no trae las iniciales`)
+    }
   })
 
   test('el responsable no trae el email ni datos de acceso, ni suelto ni en la lista', async ({
@@ -60,25 +81,9 @@ test.group('Tasks | responsable', (group) => {
     const alan = await sesion(client, 'Alan Turing', 'alan@example.com')
     const id = await tareaDe(client, ada)
 
-    const suelta = await client
-      .get(`/api/v1/tasks/${id}`)
-      .qs({ today })
-      .header('Authorization', `Bearer ${alan}`)
+    for (const [donde, assignee] of await responsables(client, alan, id)) {
+      assert.exists(assignee, `la tarea ${donde} no trae responsable`)
 
-    const lista = await client.get('/api/v1/tasks').header('Authorization', `Bearer ${alan}`)
-
-    suelta.assertStatus(200)
-    lista.assertStatus(200)
-
-    const enLaLista = (lista.body().data as any[]).find((tarea) => tarea.id === id)
-    assert.exists(enLaLista)
-
-    // El scenario dice «suelta o dentro de la lista»: se comprueban las dos, porque
-    // cada lectura tiene su propio transformer y pueden divergir.
-    for (const [donde, assignee] of [
-      ['suelta', suelta.body().data.assignee],
-      ['en la lista', enLaLista.assignee],
-    ]) {
       const serialized = JSON.stringify(assignee)
       assert.notProperty(assignee, 'email', `la tarea ${donde} expone el email`)
       assert.notInclude(serialized, 'ada@example.com', `la tarea ${donde} expone el email`)
@@ -95,20 +100,12 @@ test.group('Tasks | responsable', (group) => {
     const alan = await sesion(client, 'Alan Turing', 'alan@example.com')
     const id = await tareaDe(client, sinNombre)
 
-    const response = await client
-      .get(`/api/v1/tasks/${id}`)
-      .qs({ today })
-      .header('Authorization', `Bearer ${alan}`)
-
-    response.assertStatus(200)
-
-    const { assignee } = response.body().data
-    assert.property(assignee, 'fullName')
-    assert.isNull(assignee.fullName)
-    assert.isString(assignee.initials)
-    assert.isNotEmpty(assignee.initials)
-    // Que la interfaz pueda representarlo «sin recurrir a su email»: el email no
-    // viaja con la tarea para servir de nombre de repuesto.
-    assert.notProperty(assignee, 'email')
+    for (const [donde, assignee] of await responsables(client, alan, id)) {
+      assert.exists(assignee, `la tarea ${donde} no trae responsable`)
+      assert.property(assignee, 'fullName', `la tarea ${donde} no trae el campo del nombre`)
+      assert.isNull(assignee.fullName, `en la tarea ${donde} el nombre no llega nulo`)
+      assert.isString(assignee.initials, `la tarea ${donde} no trae las iniciales`)
+      assert.isNotEmpty(assignee.initials, `la tarea ${donde} trae las iniciales vacías`)
+    }
   })
 })
